@@ -13,7 +13,7 @@ import subprocess
 import time
 import logging
 import threading
-from gi.repository import Gio
+from gi.repository import Gio, GLib
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -65,7 +65,6 @@ def gsettings_get_list(key):
 
 
 def gsettings_set_value(key, value):
-    from gi.repository import GLib
     _settings().set_value(key, GLib.Variant("as", value))
 
 
@@ -131,8 +130,7 @@ def sync_to_all(source_id, pinned, targets):
 def _sync_zone_sizes(key):
     """Equalize panel-zone-*-icon-sizes using Panel 1 as reference."""
     try:
-        sizes = json.loads(gsettings_get_list(key)[0] if False else
-                           _settings().get_value(key).unpack())
+        sizes = json.loads(_settings().get_value(key).unpack())
     except Exception:
         return 0
 
@@ -189,10 +187,12 @@ def sync_applet_icon_sizes(size):
 
 def get_monitor_count():
     try:
-        return sum(
-            1 for f in glob.glob("/sys/class/drm/*/status")
-            if open(f).read().strip() == "connected"
-        ) or 1
+        count = 0
+        for f in glob.glob("/sys/class/drm/*/status"):
+            with open(f) as fh:
+                if fh.read().strip() == "connected":
+                    count += 1
+        return count or 1
     except Exception:
         return 1
 
@@ -251,9 +251,15 @@ def create_panels_for_new_monitors(source_instance):
 # ── Startup ──────────────────────────────────────────────────────────────────
 
 def startup_sync():
-    instances = get_instances_from_cinnamon()
+    instances = []
+    for attempt in range(5):
+        instances = get_instances_from_cinnamon()
+        if instances:
+            break
+        log.warning(f"No grouped-window-list instances found, retrying ({attempt + 1}/5)...")
+        time.sleep(3)
     if not instances:
-        log.warning("No grouped-window-list instances found")
+        log.error("Could not find any grouped-window-list instances after retries")
         return
 
     source_id = min(instances, key=int)
@@ -357,11 +363,14 @@ def main():
             log.info(f"Monitor change: {last_monitor_count} → {monitor_count}")
             last_monitor_count = monitor_count
 
-            if monitor_count > len(instances_ref[0]):
+            if monitor_count > len(instances_ref[0]) and instances_ref[0]:
                 create_panels_for_new_monitors(min(instances_ref[0], key=int))
                 time.sleep(1)
 
             instances_ref[0] = get_instances_from_cinnamon()
+            if not instances_ref[0]:
+                log.warning("No instances found after monitor change, skipping sync")
+                continue
             sync_icon_sizes()
 
             source_id = min(instances_ref[0], key=int)
