@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Cinnamon Panel Sync Daemon
-- Synct pinned-apps zwischen ALLEN grouped-window-list Instanzen (dynamisch)
-- Erkennt neue Monitore per Hotplug und erstellt/konfiguriert Panels automatisch
-- Gleicht Icon-Größen beim Start an
+- Syncs pinned-apps across ALL grouped-window-list instances (dynamically)
+- Detects new monitors via hotplug and creates/configures panels automatically
+- Equalizes icon sizes at startup
 """
 
 import glob
@@ -25,14 +25,14 @@ logging.basicConfig(
 log = logging.getLogger("panel-sync")
 
 BASE          = os.path.expanduser("~/.config/cinnamon/spices/grouped-window-list@cinnamon.org")
-DEBOUNCE      = 0.5  # Sekunden Wartezeit nach letzter Dateiänderung vor Sync
-HOTPLUG_CHECK = 5    # Sekunden zwischen Monitor-Checks
+DEBOUNCE      = 0.5  # seconds to wait after last file change before syncing
+HOTPLUG_CHECK = 5    # seconds between monitor checks
 
 
 # ── Cinnamon JS Eval ─────────────────────────────────────────────────────────
 
 def eval_js(js):
-    """JavaScript in Cinnamon auswerten. Gibt Ergebnis-String zurück."""
+    """Evaluate JavaScript in Cinnamon. Returns result string."""
     try:
         r = subprocess.run(
             ["dbus-send", "--session", "--dest=org.Cinnamon", "--print-reply",
@@ -49,7 +49,7 @@ def eval_js(js):
     return ""
 
 
-# ── gsettings via Gio (kein Subprocess) ──────────────────────────────────────
+# ── gsettings via Gio (no subprocess) ────────────────────────────────────────
 
 _cinnamon_settings = None
 
@@ -69,10 +69,10 @@ def gsettings_set_value(key, value):
     _settings().set_value(key, GLib.Variant("as", value))
 
 
-# ── Instanzen & Dateien ──────────────────────────────────────────────────────
+# ── Instances & Files ────────────────────────────────────────────────────────
 
 def get_instances_from_cinnamon():
-    """Alle laufenden grouped-window-list Instanz-IDs aus Cinnamon."""
+    """Get all running grouped-window-list instance IDs from Cinnamon."""
     result = eval_js(
         "Main.AppletManager.definitions"
         ".filter(d => d.uuid === 'grouped-window-list@cinnamon.org')"
@@ -92,14 +92,14 @@ def read_pinned(instance_id):
             d = json.load(f)
         return d.get("pinned-apps", {}).get("value", [])
     except Exception as e:
-        log.warning(f"Lesen fehlgeschlagen ({path}): {e}")
+        log.warning(f"Read failed ({path}): {e}")
         return None
 
 
-# ── Pinned-Apps setzen ───────────────────────────────────────────────────────
+# ── Set Pinned Apps ──────────────────────────────────────────────────────────
 
 def set_pinned(instance_id, pinned):
-    """setValue + onFavoritesChange() direkt im laufenden Applet."""
+    """Call setValue + onFavoritesChange() directly on the running applet."""
     apps_json = json.dumps(pinned)
     js = f"""try {{
     let mgr = Main.settingsManager.uuids['grouped-window-list@cinnamon.org'];
@@ -123,13 +123,13 @@ def sync_to_all(source_id, pinned, targets):
     for tid in targets:
         if set_pinned(tid, pinned):
             time.sleep(0.1)
-            log.info(f"  → Instanz {tid} aktualisiert")
+            log.info(f"  → instance {tid} updated")
 
 
-# ── Icon-Größen ──────────────────────────────────────────────────────────────
+# ── Icon Sizes ───────────────────────────────────────────────────────────────
 
 def _sync_zone_sizes(key):
-    """Gleicht panel-zone-*-icon-sizes auf Panel 1 als Referenz an."""
+    """Equalize panel-zone-*-icon-sizes using Panel 1 as reference."""
     try:
         sizes = json.loads(gsettings_get_list(key)[0] if False else
                            _settings().get_value(key).unpack())
@@ -153,13 +153,13 @@ def _sync_zone_sizes(key):
 
     if changed:
         gsettings_set_value(key, [json.dumps(list(new_sizes.values()))])
-        log.info(f"{key}: right={ref['right']}px für alle Panels angeglichen")
+        log.info(f"{key}: equalized right={ref['right']}px across all panels")
 
     return ref.get("right") or 0
 
 
 def sync_icon_sizes():
-    """Icon-Größen aller Panels (fullcolor + symbolic) auf Panel 1 angleichen."""
+    """Equalize icon sizes (fullcolor + symbolic) across all panels using Panel 1 as reference."""
     right_size = _sync_zone_sizes("panel-zone-icon-sizes")
     _sync_zone_sizes("panel-zone-symbolic-icon-sizes")
     if right_size:
@@ -167,7 +167,7 @@ def sync_icon_sizes():
 
 
 def sync_applet_icon_sizes(size):
-    """Setzt icon_size direkt auf Applet-Icons aller Panels."""
+    """Set icon_size directly on applet icons of all panels."""
     js = f"""try {{
     ['network@cinnamon.org','sound@cinnamon.org'].forEach(uuid => {{
         Main.AppletManager.definitions.filter(d => d.uuid === uuid).forEach(d => {{
@@ -180,12 +180,12 @@ def sync_applet_icon_sizes(size):
 }} catch(e) {{ 'ERR:' + e.message; }}"""
     result = eval_js(js)
     if result == "OK":
-        log.info(f"Applet-Icon-Größen auf {size}px gesetzt")
+        log.info(f"Applet icon sizes set to {size}px")
     else:
         log.warning(f"sync_applet_icon_sizes: {result}")
 
 
-# ── Monitor-Hotplug & Panel-Erstellung ───────────────────────────────────────
+# ── Monitor Hotplug & Panel Creation ─────────────────────────────────────────
 
 def get_monitor_count():
     try:
@@ -230,7 +230,7 @@ def create_panels_for_new_monitors(source_instance):
     for mon in range(monitor_count):
         if mon in existing_monitors:
             continue
-        log.info(f"Neuer Monitor {mon} erkannt → erstelle Panel {next_id}")
+        log.info(f"New monitor {mon} detected → creating panel {next_id}")
         panels.append((next_id, mon, ref_panel[2]))
         heights[next_id] = ref_height
         next_id += 1
@@ -243,7 +243,7 @@ def create_panels_for_new_monitors(source_instance):
                         [f"{pid}:{mon}:{pos}" for pid, mon, pos in panels])
     gsettings_set_value("panels-height",
                         [f"{pid}:{h}" for pid, h in sorted(heights.items())])
-    log.info("Neue Panels erstellt, warte auf Cinnamon...")
+    log.info("New panels created, waiting for Cinnamon...")
     time.sleep(3)
     return True
 
@@ -253,16 +253,16 @@ def create_panels_for_new_monitors(source_instance):
 def startup_sync():
     instances = get_instances_from_cinnamon()
     if not instances:
-        log.warning("Keine grouped-window-list Instanzen gefunden")
+        log.warning("No grouped-window-list instances found")
         return
 
     source_id = min(instances, key=int)
-    log.info(f"Instanzen gefunden: {instances} (Quelle: {source_id})")
+    log.info(f"Instances found: {instances} (source: {source_id})")
 
     sync_icon_sizes()
     time.sleep(2)
     sync_icon_sizes()
-    log.info("Startup: Icon-Größen angeglichen")
+    log.info("Startup: icon sizes equalized")
 
     create_panels_for_new_monitors(source_id)
 
@@ -274,7 +274,7 @@ def startup_sync():
     if source_pinned is None:
         return
 
-    log.info(f"Startup: sync {len(source_pinned)} Apps von Instanz {source_id} → {targets}")
+    log.info(f"Startup: syncing {len(source_pinned)} apps from instance {source_id} → {targets}")
     set_pinned(source_id, source_pinned)
     sync_to_all(source_id, source_pinned, targets)
 
@@ -284,7 +284,7 @@ def startup_sync():
 # ── inotify Handler ──────────────────────────────────────────────────────────
 
 class InstanceFileHandler(FileSystemEventHandler):
-    """Reagiert auf Dateiänderungen per inotify — mit Debounce."""
+    """Reacts to file changes via inotify — with debounce."""
 
     def __init__(self, instances_ref):
         self._instances_ref = instances_ref  # mutable list [instances]
@@ -325,20 +325,20 @@ class InstanceFileHandler(FileSystemEventHandler):
         targets = [i for i in instances if i != changed_id]
         if not any(read_pinned(t) != pinned for t in targets):
             return
-        log.info(f"Änderung auf Instanz {changed_id} ({len(pinned)} Apps) → sync zu {targets}")
+        log.info(f"Change on instance {changed_id} ({len(pinned)} apps) → syncing to {targets}")
         sync_to_all(changed_id, pinned, targets)
 
 
-# ── Hauptschleife ────────────────────────────────────────────────────────────
+# ── Main Loop ────────────────────────────────────────────────────────────────
 
 def main():
-    log.info("Panel-Sync gestartet (dynamisch, multi-monitor)")
+    log.info("Panel-Sync started (dynamic, multi-monitor)")
     time.sleep(2)
 
     instances = startup_sync() or get_instances_from_cinnamon()
-    instances_ref = [instances]  # mutable Referenz für Handler
+    instances_ref = [instances]  # mutable reference for handler
 
-    log.info(f"Überwache {len(instances)} Instanzen via inotify: {instances}")
+    log.info(f"Watching {len(instances)} instances via inotify: {instances}")
 
     handler = InstanceFileHandler(instances_ref)
     observer = Observer()
@@ -354,7 +354,7 @@ def main():
             if monitor_count == last_monitor_count:
                 continue
 
-            log.info(f"Monitor-Änderung: {last_monitor_count} → {monitor_count}")
+            log.info(f"Monitor change: {last_monitor_count} → {monitor_count}")
             last_monitor_count = monitor_count
 
             if monitor_count > len(instances_ref[0]):
