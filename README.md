@@ -33,7 +33,7 @@ new monitor. The daemon normalizes all panels to Panel 1's icon size at startup.
 
   panel-sync.py       — The daemon script
   panel-sync.desktop  — Autostart entry (placed in ~/.config/autostart/)
-  howto.txt           — This file
+  README.md           — This file
 
 
 ## Installation
@@ -52,6 +52,9 @@ new monitor. The daemon normalizes all panels to Panel 1's icon size at startup.
 3. Enable autostart by copying the desktop entry:
 
      cp panel-sync.desktop ~/.config/autostart/panel-sync.desktop
+
+   **Important:** Open `~/.config/autostart/panel-sync.desktop` and replace
+   `/home/YOUR_USERNAME/` with your actual home directory path.
 
 4. Start it immediately without rebooting:
 
