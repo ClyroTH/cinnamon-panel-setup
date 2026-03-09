@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Panel Sync
+Comment=Synchronisiert pinned-apps zwischen Cinnamon Panels
+Exec=python3 /home/manuel/.local/bin/panel-sync.py
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
