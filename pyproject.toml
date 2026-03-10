@@ -1,0 +1,14 @@
+[project]
+name = "cinnamon-panel-setup"
+version = "0.1.0"
+requires-python = ">=3.8"
+description = "Daemon that synchronises Cinnamon panel configurations across monitors"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-mock",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
